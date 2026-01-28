@@ -1,13 +1,18 @@
 import Alert from "../models/Alert.js";
 import jwt from "jsonwebtoken";
 
-// Fix: RangeError: Invalid time value
+// Safe ISO
 const toIsoSafe = (ts) => {
   const d = ts instanceof Date ? ts : new Date(ts);
   return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 };
 
 const nowMinusMinutes = (min) => new Date(Date.now() - min * 60 * 1000);
+
+// "Intelligent" alert settings
+const CPU_THRESHOLD = 90;
+const CPU_STREAK_REQUIRED = 3; // 3 consecutive readings
+const ALERT_COOLDOWN_MS = 60_000; // 60s
 
 const seedAlertsIfEmpty = async () => {
   const count = await Alert.countDocuments();
@@ -95,24 +100,33 @@ const makeBarPoint = (label) => {
 
 const clamp2 = (n) => Number(n.toFixed(2));
 
+async function broadcastLatestAlerts(io) {
+  const latest = await Alert.find().sort({ timestamp: -1 }).limit(20).lean();
+  io.emit("alerts:update", {
+    alerts: latest.map(mapAlert),
+    timestamp: Date.now(),
+  });
+}
+
 export function registerSocketHandlers(io) {
   io.on("connection", async (socket) => {
     console.log("Socket connected:", socket.id);
-const token = socket.handshake.auth?.token;
 
-if (token) {
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    socket.user = payload;
-    console.log("Socket authed user:", payload.email);
-  } catch {
-    console.log("Socket token invalid (continuing as guest)");
-  }
-} else {
-  console.log("Socket guest connection");
-}
+    // Auth (optional)
+    const token = socket.handshake.auth?.token;
+    if (token) {
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        socket.user = payload;
+        console.log("Socket authed user:", payload.email);
+      } catch {
+        console.log("Socket token invalid (continuing as guest)");
+      }
+    } else {
+      console.log("Socket guest connection");
+    }
 
-    // --- Alerts: seed + initial send
+    // Seed + initial send
     try {
       await seedAlertsIfEmpty();
       const alerts = await Alert.find().sort({ timestamp: -1 }).limit(20).lean();
@@ -125,7 +139,7 @@ if (token) {
       console.error("Seed alerts error:", err);
     }
 
-    // --- Activity (demo)
+    // Activity (demo)
     let activities = [
       {
         id: "a1",
@@ -143,7 +157,7 @@ if (token) {
       },
     ];
 
-    // --- Metrics initial
+    // Metrics initial
     let lineChartData = Array.from({ length: 12 }, (_, i) => makeLinePoint(i));
     let barChartData = [
       makeBarPoint("node-01"),
@@ -170,8 +184,11 @@ if (token) {
       timestamp: Date.now(),
     });
 
-    // --- Intervals
-    const metricsInterval = setInterval(() => {
+    // Intelligent CPU alert state (per connection)
+    let cpuHighStreak = 0;
+    let cpuCooldownUntil = 0;
+
+    const metricsInterval = setInterval(async () => {
       lineChartData = [...lineChartData.slice(1), makeLinePoint(11)];
 
       barChartData = [
@@ -181,6 +198,7 @@ if (token) {
         makeBarPoint("db-01"),
       ];
 
+      // KPI updates
       const rtDelta = (Math.random() - 0.5) * 12;
       const usersDelta = (Math.random() - 0.5) * 180;
       const revDelta = (Math.random() - 0.5) * 900;
@@ -208,12 +226,44 @@ if (token) {
         },
       };
 
+      // Emit metrics
       socket.emit("metrics:update", {
         lineChartData,
         barChartData,
         kpis,
         timestamp: Date.now(),
       });
+
+      // --- Intelligent alert logic: node-01 CPU
+      const node01 = barChartData.find((x) => x.label === "node-01");
+      const cpu = node01?.value ?? 0;
+
+      if (cpu >= CPU_THRESHOLD) cpuHighStreak += 1;
+      else cpuHighStreak = 0;
+
+      const now = Date.now();
+      const canAlert = now >= cpuCooldownUntil;
+
+      if (cpuHighStreak >= CPU_STREAK_REQUIRED && canAlert) {
+        cpuCooldownUntil = now + ALERT_COOLDOWN_MS;
+        cpuHighStreak = 0;
+
+        try {
+          const userEmail = socket.user?.email ? ` (${socket.user.email})` : "";
+          await Alert.create({
+            severity: "critical",
+            title: "High CPU Usage (Streak)",
+            message: `node-01 CPU stayed above ${CPU_THRESHOLD}% for ${CPU_STREAK_REQUIRED} consecutive readings. Current: ${cpu}%`,
+            source: `System Monitor${userEmail}`,
+            acknowledged: false,
+            timestamp: new Date(),
+          });
+
+          await broadcastLatestAlerts(io);
+        } catch (err) {
+          console.error("create CPU alert error:", err);
+        }
+      }
     }, 2000);
 
     const activityInterval = setInterval(() => {
@@ -246,6 +296,7 @@ if (token) {
       });
     }, 4000);
 
+    // Keep alerts in sync for this socket as well (optional)
     const alertsInterval = setInterval(async () => {
       try {
         const alerts = await Alert.find().sort({ timestamp: -1 }).limit(20).lean();
