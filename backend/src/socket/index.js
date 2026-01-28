@@ -1,4 +1,5 @@
 import Alert from "../models/Alert.js";
+import jwt from "jsonwebtoken";
 
 // Fix: RangeError: Invalid time value
 const toIsoSafe = (ts) => {
@@ -97,6 +98,19 @@ const clamp2 = (n) => Number(n.toFixed(2));
 export function registerSocketHandlers(io) {
   io.on("connection", async (socket) => {
     console.log("Socket connected:", socket.id);
+const token = socket.handshake.auth?.token;
+
+if (token) {
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user = payload;
+    console.log("Socket authed user:", payload.email);
+  } catch {
+    console.log("Socket token invalid (continuing as guest)");
+  }
+} else {
+  console.log("Socket guest connection");
+}
 
     // --- Alerts: seed + initial send
     try {

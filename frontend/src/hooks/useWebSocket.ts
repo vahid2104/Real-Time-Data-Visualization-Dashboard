@@ -27,9 +27,11 @@ export function useWebSocket() {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
+    const token = localStorage.getItem("auth_token") || "";
+
     const socket = io(SOCKET_URL, {
       withCredentials: true,
-      transports: ["websocket", "polling"],
+      auth: token ? { token } : {},
     });
 
     socketRef.current = socket;

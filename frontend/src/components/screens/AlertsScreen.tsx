@@ -15,7 +15,9 @@ interface Alert {
   source: string;
   acknowledged: boolean;
 }
-
+interface AlertsScreenProps {
+  searchQuery: string;
+}
 const mockAlerts: Alert[] = [
   {
     id: '1',
@@ -122,10 +124,9 @@ const severityConfig = {
   },
 };
 
-export function AlertsScreen() {
+export function AlertsScreen({ searchQuery }: AlertsScreenProps) {
   const [alerts, setAlerts] = useState(mockAlerts);
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
 
   const handleAcknowledge = (alertId: string) => {
     setAlerts(alerts.map(alert => 
@@ -204,7 +205,7 @@ export function AlertsScreen() {
             <Input
               placeholder="Search alerts..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              readOnly
               className="pl-10"
             />
           </div>

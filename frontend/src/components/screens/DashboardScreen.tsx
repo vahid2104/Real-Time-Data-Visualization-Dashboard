@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { DollarSign, TrendingUp, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
+import {
+  DollarSign,
+  TrendingUp,
+  ArrowUpCircle,
+  ArrowDownCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { KPIStatCard } from "../KPIStatCard";
@@ -10,22 +15,86 @@ import { ActivityTimeline } from "../ActivityTimeline";
 import { DashboardHeader } from "../DashboardHeader";
 
 import { useWebSocket } from "../../hooks/useWebSocket";
-import { generateInitialLineData, generateInitialBarData, mockActivities } from "../../data/mockData";
+import {
+  generateInitialLineData,
+  generateInitialBarData,
+  mockAlerts,
+  mockActivities,
+} from "../../data/mockData";
 
-export function DashboardScreen() {
+function parseTimeLabelToDate(label: string): Date | null {
+  // label "11:18:40 AM" kimidir (sənin mock datada belədir)
+  const now = new Date();
+  const d = new Date(`${now.toDateString()} ${label}`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function withinRange(date: Date, range: string) {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const hour = 60 * 60 * 1000;
+
+  if (range === "1h") return diffMs <= 1 * hour;
+  if (range === "24h") return diffMs <= 24 * hour;
+  if (range === "7d") return diffMs <= 7 * 24 * hour;
+  if (range === "30d") return diffMs <= 30 * 24 * hour;
+  return true;
+}
+
+export function DashboardScreen({ searchQuery }: { searchQuery: string }) {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState("24h");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  // filter keys nümunə: "severity:critical", "category:cpu"
+  const hasFilter = (key: string) => activeFilters.includes(key);
 
   const { isConnected, metrics, alerts, activities } = useWebSocket();
 
   const lineData = useMemo(() => {
-    return metrics?.lineChartData?.length ? metrics.lineChartData : generateInitialLineData();
-  }, [metrics]);
+    const base = metrics?.lineChartData?.length
+      ? metrics.lineChartData
+      : generateInitialLineData();
+
+    const q = searchQuery.trim().toLowerCase();
+
+    // timeRange filter (lineData time string-dir)
+    const timeFiltered = base.filter((p) => {
+      const d = parseTimeLabelToDate(p.time);
+      if (!d) return true;
+      return withinRange(d, timeRange);
+    });
+
+    // search (label/time/value üstündə)
+    if (!q) return timeFiltered;
+
+    return timeFiltered.filter((p) => {
+      const hay = `${p.time} ${p.value}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [metrics, searchQuery, timeRange]);
 
   const barData = useMemo(() => {
-    return metrics?.barChartData?.length ? metrics.barChartData : generateInitialBarData();
-  }, [metrics]);
+    const base = metrics?.barChartData?.length
+      ? metrics.barChartData
+      : generateInitialBarData();
+
+    const q = searchQuery.trim().toLowerCase();
+
+    // category filter (məs: cpu)
+    const categoryFiltered = base.filter((p) => {
+      const categoryOk = hasFilter("category:cpu")
+        ? p.category === "cpu"
+        : true;
+      return categoryOk;
+    });
+
+    if (!q) return categoryFiltered;
+
+    return categoryFiltered.filter((p) => {
+      const hay = `${p.time} ${p.value} ${p.category}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [metrics, searchQuery, activeFilters]);
 
   const kpis = useMemo(() => {
     const revenue = metrics?.kpis?.revenue?.value ?? 190068.41;
@@ -42,6 +111,25 @@ export function DashboardScreen() {
       minValue,
     };
   }, [metrics, lineData]);
+  const filteredAlerts = useMemo(() => {
+    const base = alerts?.length ? alerts : mockAlerts;
+    const q = searchQuery.trim().toLowerCase();
+
+    const severityFiltered = base.filter((a: any) => {
+      if (hasFilter("severity:critical")) return a.severity === "critical";
+      if (hasFilter("severity:warning")) return a.severity === "warning";
+      if (hasFilter("severity:info")) return a.severity === "info";
+      return true;
+    });
+
+    if (!q) return severityFiltered;
+
+    return severityFiltered.filter((a: any) => {
+      const hay =
+        `${a.title ?? ""} ${a.message ?? ""} ${a.severity ?? ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [alerts, searchQuery, activeFilters]);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 1500);
@@ -132,13 +220,17 @@ export function DashboardScreen() {
         </div>
 
         <div className="lg:col-span-4">
-          <AlertsPanel alerts={alerts} loading={loading} />
+          <AlertsPanel alerts={filteredAlerts as any} loading={loading} />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8">
-          <RealtimeBarChart data={barData} title="Server CPU Usage" loading={loading} />
+          <RealtimeBarChart
+            data={barData}
+            title="Server CPU Usage"
+            loading={loading}
+          />
         </div>
 
         <div className="lg:col-span-4">

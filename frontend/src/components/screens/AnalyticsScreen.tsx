@@ -2,7 +2,9 @@ import { TrendingUp, TrendingDown, Users, DollarSign, Activity, PieChart as PieC
 import { Card } from '../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-
+interface AnalyticsScreenProps {
+  searchQuery: string;
+}
 const performanceData = [
   { name: 'Jan', revenue: 4000, expenses: 2400, profit: 1600 },
   { name: 'Feb', revenue: 3000, expenses: 1398, profit: 1602 },
@@ -46,7 +48,7 @@ const regionData = [
   { region: 'Africa', users: 900, revenue: 18000 },
 ];
 
-export function AnalyticsScreen() {
+export function AnalyticsScreen({ searchQuery }: AnalyticsScreenProps) {
   return (
     <div className="space-y-6">
       {/* Header */}

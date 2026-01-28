@@ -1,16 +1,15 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import mongoose from "mongoose";
+import dotenv from "dotenv";
 
 import healthRouter from "./routes/health.js";
 import initialRouter from "./routes/initial.js";
+import authRouter from "./routes/auth.js";
 
 dotenv.config();
 
 export async function connectDb() {
-  if (!process.env.MONGO_URI) return;
-
   await mongoose.connect(process.env.MONGO_URI);
   console.log("MongoDB connected");
 }
@@ -20,7 +19,7 @@ export function createApp() {
 
   app.use(
     cors({
-      origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+      origin: process.env.CLIENT_ORIGIN,
       credentials: true,
     })
   );
@@ -29,6 +28,7 @@ export function createApp() {
 
   app.use("/api/health", healthRouter);
   app.use("/api/initial", initialRouter);
+  app.use("/api/auth", authRouter);
 
   return app;
 }
