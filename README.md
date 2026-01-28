@@ -63,8 +63,6 @@ Real-Time-Data-Visualization-Dashboard/
 │ └─ ...
 └─ README.md
 
-yaml
-Copy code
 
 ---
 
@@ -90,19 +88,17 @@ npm install
 npm run dev
 Backend will start at:
 
-arduino
-Copy code
+
+
 http://localhost:4000
 2️⃣ Frontend
-bash
-Copy code
+
 cd frontend
 npm install
 npm run dev
 Frontend will start at:
 
-arduino
-Copy code
+
 http://localhost:3000
 🔴 Real-Time Behavior
 When backend is running → dashboard shows LIVE status
@@ -121,6 +117,19 @@ Managing WebSocket connection state
 Syncing backend events with frontend charts
 
 Persisting alerts using MongoDB
+
+## Testing & Validation
+
+### Automated Tests
+- Backend API was tested using Vitest and Supertest.
+- Implemented unit test for health endpoint:
+  - GET /api/health → returns `{ ok: true }`
+
+### Manual Testing
+- WebSocket connection tested by stopping and restarting backend server.
+- Dashboard correctly switches between live and offline states.
+- Authentication flow tested (register → login → dashboard access).
+
 
 📚 Future Improvements
 Authentication & user roles
